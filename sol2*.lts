@@ -1,0 +1,123 @@
+/**
+* Student Name: Yang Xiong
+* Student Id  : 722890
+* Model a bicycle quality control system in FSP. There are two diffrent 
+* length belts in the system, and deadlock will not occur. 
+**/
+
+
+/* Constants */
+
+/** 
+* For every segment in the belt, there are three states. 0 means there is 
+* no bicycle on the segment, 1 means there is a bicycle without tag on the 
+* segment and 2 represent tagged bicycle on the segment. 
+*/
+const Empty = 0
+const NoTaggedBicycle =1 
+const TaggedBicycle = 2
+range T = Empty..TaggedBicycle
+
+
+/* Processes */ 
+
+/** 
+* Producer is a non-determinstic process. It can produce a tagged bicycle 
+* or a normal bicycle, which has no tag.
+**/
+PRODUCER = (taggedBicycle -> PRODUCER | noTaggedBicycle -> PRODUCER).
+
+/**
+* Long consumer will remove the bicycle from the long belt. Short consumer
+* will remove the bicycyle from the shrot belt
+*/
+LONGCONSUMER = (longRemove -> LONGCONSUMER).
+SHORTCONSUMER = (shortRemove -> SHORTCONSUMER).
+
+/** 
+* Long belt has five indexs, which means the states of five segments. Short 
+* Belt has two index, which means the states of two segments. And Each segment 
+* has three states, initial state of both belt are all segments is empty.  
+*/
+LONGBELT = LONGBELT[Empty][Empty][Empty][Empty][Empty],
+LONGBELT[first:T][second:T][third:T][forth:T][fifth:T] =(
+	/** 
+	* If the first segment is empty, we could place a tagged bicycle or a 
+	* bicycle without tag on it. 
+	*/
+	  when (first == Empty) taggedBicycle -> 
+	  			    LONGBELT[TaggedBicycle][second][third][forth][fifth]
+	| when (first == Empty) noTaggedBicycle -> 
+			        LONGBELT[NoTaggedBicycle][second][third][forth][fifth]
+    /** 
+	* If the fifth segment is not empty, we could remove the bicycle from
+	* it. Then it's state becomes empty.
+	*/
+	| when (fifth != Empty) longRemove -> 
+	                LONGBELT[first][second][third][forth][Empty]
+	/**
+	* If there is no bicycle on the fifth segment, whole belt is not empty
+	* and all tagged bicycles on the thrid segment have been checked, then 
+	* we could move the belt forward. 
+	*/               
+	| when (fifth == Empty &&(first != Empty || second!=Empty || third !=Empty 
+	                || forth!= Empty) && (third!= TaggedBicycle)) longMove  -> 
+	                LONGBELT[Empty][first][second][third][forth]
+	/** 
+    * This part is doing the job of sensor, if sensor has found tagged bicycle
+    * on third segment, then the robot will take it from belt to inspector. 
+    */
+	| when (third == TaggedBicycle) robotGet -> 
+	                LONGBELT[first][second][Empty][forth][fifth]
+	). 
+
+SHORTBELT = SHORTBELT[Empty][Empty],
+SHORTBELT[first:T][second:T] =(
+	/** 
+	* If the first segment is empty, the robot could place a inspected bicycle 
+	* on it. 
+	*/
+	  when (first == Empty) robotPut -> 
+	                SHORTBELT[NoTaggedBicycle][second]
+	/** 
+	* If the second segment is not empty, we could remove the bicycle from
+	* it. Then it's state becomes empty.
+	*/
+	| when (second != Empty) shortRemove -> 
+	                SHORTBELT[first][Empty]
+	/**
+	* If there is no bicycle on the second segment and whole belt is not 
+	* empty, then we could move the belt forward. 
+	*/
+	| when (second == Empty && (first != Empty || second!=Empty)) shortMove -> 
+	                SHORTBELT[Empty][first]
+    ).
+
+/**
+* Robot is supposed to get the tagged Bicycle form long belt to inspector. And 
+* put it to short belt after inspecting. 
+*/
+ROBOT = (robotGet -> inspect -> robotPut -> ROBOT).
+
+/* Inspector need to inspect tagged bicycle */
+INSPECTOR = (inspect -> INSPECTOR).
+
+/* To get the whole system, we need combine all processes together */
+||SYSTEM = (PRODUCER || LONGCONSUMER || LONGBELT || SHORTCONSUMER || SHORTBELT 
+           || ROBOT || INSPECTOR || INSPECT_TAGGEDBICYCLE).
+
+
+/* Safety properties */
+
+/* Ensure all tagged bicycles are inspected */
+property INSPECT_TAGGEDBICYCLE = (robotGet -> inspect -> robotPut -> 
+								  INSPECT_TAGGEDBICYCLE).
+
+
+/* Liveness properties */
+
+/* Ensure these actions will be executed */
+progress REMOVE = {longRemove, shortRemove}
+progress PRODUCEBICYCLE = {taggedBicycle, noTaggedBicycle} 
+progress MOVEMENT = {longMove}
+
